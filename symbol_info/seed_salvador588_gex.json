@@ -1,0 +1,62 @@
+{
+  "symbol": [
+    "SPY_CALLWALL",
+    "SPY_PUTWALL",
+    "SPY_FLIP",
+    "SPY_NETGEX",
+    "SPY_SPOT",
+    "QQQ_CALLWALL",
+    "QQQ_PUTWALL",
+    "QQQ_FLIP",
+    "QQQ_NETGEX",
+    "QQQ_SPOT"
+  ],
+  "description": [
+    "SPY GEX CALLWALL",
+    "SPY GEX PUTWALL",
+    "SPY GEX FLIP",
+    "SPY GEX NETGEX",
+    "SPY GEX SPOT",
+    "QQQ GEX CALLWALL",
+    "QQQ GEX PUTWALL",
+    "QQQ GEX FLIP",
+    "QQQ GEX NETGEX",
+    "QQQ GEX SPOT"
+  ],
+  "currency": [
+    "USD",
+    "USD",
+    "USD",
+    "USD",
+    "USD",
+    "USD",
+    "USD",
+    "USD",
+    "USD",
+    "USD"
+  ],
+  "session-regular": [
+    "24x7",
+    "24x7",
+    "24x7",
+    "24x7",
+    "24x7",
+    "24x7",
+    "24x7",
+    "24x7",
+    "24x7",
+    "24x7"
+  ],
+  "timezone": [
+    "America/New_York",
+    "America/New_York",
+    "America/New_York",
+    "America/New_York",
+    "America/New_York",
+    "America/New_York",
+    "America/New_York",
+    "America/New_York",
+    "America/New_York",
+    "America/New_York"
+  ]
+}
