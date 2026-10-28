@@ -1,5 +1,4 @@
-"""Berechnet GEX-Levels aus der Options-Chain (yfinance) und schreibt Pine-Seeds-CSVs."""
-import json
+"""Berechnet GEX-Levels (yfinance) und schreibt latest.txt."""
 import os
 import datetime as dt
 from zoneinfo import ZoneInfo
@@ -10,10 +9,9 @@ import yfinance as yf
 
 TICKERS = [t.strip() for t in os.environ.get("GEX_TICKERS", "SPY,QQQ").split(",") if t.strip()]
 MAX_DAYS = int(os.environ.get("GEX_MAX_DAYS", "45"))
+BAND = float(os.environ.get("GEX_BAND", "0.04"))
 RATE = 0.045
-DATA_DIR = "data"
-SYMBOL_INFO_DIR = "symbol_info"
-SUFFIXES = ["CALLWALL", "PUTWALL", "FLIP", "NETGEX", "SPOT"]
+OUT_FILE = "latest.txt"
 
 
 def bs_gamma(S, K, T, sigma):
@@ -61,6 +59,7 @@ def compute(ticker, today):
 
     gamma = bs_gamma(spot, df["strike"].to_numpy(), df["T"].to_numpy(), df["impliedVolatility"].to_numpy())
     df = df.assign(gex=gamma * df["openInterest"] * 100 * spot ** 2 * 0.01 * df["sign"])
+
     calls = df[df["sign"] > 0].groupby("strike")["gex"].sum()
     puts = df[df["sign"] < 0].groupby("strike")["gex"].sum()
     call_wall = float(calls.idxmax())
@@ -69,67 +68,54 @@ def compute(ticker, today):
 
     grid = np.linspace(spot * 0.9, spot * 1.1, 201)
     prof = gex_profile(df, grid)
-    flip = 0.0
     best = None
     for i in range(len(grid) - 1):
         if prof[i] == 0 or prof[i] * prof[i + 1] < 0:
             x = grid[i] - prof[i] * (grid[i + 1] - grid[i]) / (prof[i + 1] - prof[i]) if prof[i] != 0 else grid[i]
             if best is None or abs(x - spot) < abs(best - spot):
                 best = x
-    if best is not None:
-        flip = float(best)
+    flip = float(best) if best is not None else 0.0
 
-    return {"CALLWALL": call_wall, "PUTWALL": put_wall, "FLIP": flip, "NETGEX": net, "SPOT": spot}
+    per_strike = df.groupby("strike")["gex"].sum() / 1e6
+    per_strike = per_strike[(per_strike.index >= spot * (1 - BAND)) & (per_strike.index <= spot * (1 + BAND))]
+    per_strike = per_strike.sort_index()
 
-
-def upsert(symbol, date, value):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    path = os.path.join(DATA_DIR, f"{symbol}.csv")
-    key = date.strftime("%Y%m%dT")
-    lines = {}
-    if os.path.exists(path):
-        with open(path) as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    lines[line.split(",")[0]] = line
-    v = round(value, 3)
-    lines[key] = f"{key},{v},{v},{v},{v},0"
-    with open(path, "w") as f:
-        f.write("\n".join(lines[k] for k in sorted(lines)) + "\n")
-
-
-def write_symbol_info():
-    repo = os.environ.get("GITHUB_REPOSITORY", "DEINUSER/seed_DEINUSER_gex").split("/")[1]
-    symbols = [f"{t}_{s}" for t in TICKERS for s in SUFFIXES]
-    n = len(symbols)
-    info = {
-        "symbol": symbols,
-        "description": [f"{t} GEX {s}" for t in TICKERS for s in SUFFIXES],
-        "currency": ["USD"] * n,
-        "session-regular": ["24x7"] * n,
-        "timezone": ["America/New_York"] * n,
+    return {
+        "spot": spot,
+        "strikes": ",".join(f"{k:g}" for k in per_strike.index),
+        "gex": ",".join(f"{v:.1f}" for v in per_strike.values),
+        "call_wall": call_wall,
+        "put_wall": put_wall,
+        "flip": flip,
+        "net": net,
     }
-    os.makedirs(SYMBOL_INFO_DIR, exist_ok=True)
-    with open(os.path.join(SYMBOL_INFO_DIR, f"{repo}.json"), "w") as f:
-        json.dump(info, f, indent=2)
 
 
 def main():
     today = dt.datetime.now(ZoneInfo("America/New_York")).date()
+    blocks = [f"GEX-Werte berechnet am {today.isoformat()} (US-Börsenschluss)\n"]
     ok = 0
     for t in TICKERS:
         try:
-            res = compute(t, today)
+            r = compute(t, today)
         except Exception as e:
             print(f"[{t}] Fehler: {e}")
+            blocks.append(f"=== {t}: FEHLER ({e}) ===\n")
             continue
-        valid_from = pd.Timestamp(np.busday_offset(today, 1, roll="forward")).date()
-        for suffix, value in res.items():
-            upsert(f"{t}_{suffix}", valid_from, value)
-        print(f"[{t}] {res}")
+        flip = f"{r['flip']:.2f}" if r["flip"] > 0 else "0 (nicht gefunden, leer lassen)"
+        blocks.append(
+            f"=== {t}  (Kurs {r['spot']:.2f}) ===\n"
+            f"Strikes (kommagetrennt):\n{r['strikes']}\n\n"
+            f"GEX je Strike (Mio $ pro 1% Move):\n{r['gex']}\n\n"
+            f"Call Wall:  {r['call_wall']:g}\n"
+            f"Put Wall:   {r['put_wall']:g}\n"
+            f"Gamma Flip: {flip}\n"
+            f"Net GEX:    {r['net']:.2f} Mrd $\n"
+        )
+        print(f"[{t}] ok")
         ok += 1
-    write_symbol_info()
+    with open(OUT_FILE, "w", encoding="utf-8") as f:
+        f.write("\n".join(blocks))
     if ok == 0:
         raise SystemExit("Kein Ticker erfolgreich berechnet")
 
