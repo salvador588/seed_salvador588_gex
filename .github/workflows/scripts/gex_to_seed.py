@@ -70,8 +70,8 @@ def find_flip(df, spot):
 def walls(df, spot):
     gamma = bs_gamma(spot, df["strike"].to_numpy(), df["T"].to_numpy(), df["impliedVolatility"].to_numpy())
     df = df.assign(gex=gamma * df["openInterest"] * 100 * spot ** 2 * 0.01 * df["sign"])
-    calls = df[df["sign"] > 0].groupby("strike")["gex"].sum()
-    puts = df[df["sign"] < 0].groupby("strike")["gex"].sum()
+    calls = df[(df["sign"] > 0) & (df["strike"] >= spot)].groupby("strike")["gex"].sum()
+    puts = df[(df["sign"] < 0) & (df["strike"] <= spot)].groupby("strike")["gex"].sum()
     call_wall = float(calls.idxmax()) if not calls.empty else 0.0
     put_wall = float(puts.idxmin()) if not puts.empty else 0.0
     return df, call_wall, put_wall, float(df["gex"].sum()) / 1e9
