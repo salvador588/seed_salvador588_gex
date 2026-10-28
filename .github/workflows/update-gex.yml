@@ -1,0 +1,42 @@
+name: Update GEX data
+
+on:
+  schedule:
+    # Mo-Fr 22:30 UTC = nach US-Börsenschluss (auch bei Winterzeit)
+    - cron: "30 22 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compute GEX and write seed files
+        env:
+          GEX_TICKERS: "SPY,QQQ"
+          GEX_MAX_DAYS: "45"
+        run: python scripts/gex_to_seed.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "gex-bot"
+          git config user.email "gex-bot@users.noreply.github.com"
+          git add data symbol_info
+          if git diff --cached --quiet; then
+            echo "Keine Änderungen"
+          else
+            git commit -m "GEX update $(date -u +%Y-%m-%d)"
+            git push
+          fi
