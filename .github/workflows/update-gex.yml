@@ -27,7 +27,7 @@ jobs:
         env:
           GEX_TICKERS: "SPY,QQQ"
           GEX_MAX_DAYS: "45"
-        run: python scripts/gex_to_seed.py
+        run: python .github/workflows/scripts/gex_to_seed.py
 
       - name: Commit and push
         run: |
