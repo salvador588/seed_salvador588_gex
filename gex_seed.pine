@@ -1,0 +1,51 @@
+//@version=6
+indicator("GEX Levels (Auto, Pine Seeds)", overlay = true, max_labels_count = 50)
+
+// ===== Eingaben =====
+repo = input.string("seed_DEINUSER_gex", "Seed-Repo", tooltip = "Name deines GitHub-Repos, z. B. seed_max_gex")
+base = input.string("SPY", "Datenticker", options = ["SPY", "QQQ"], tooltip = "Für welchen Ticker die GEX-Levels berechnet wurden.")
+mult = input.float(1.0, "Skalierung", minval = 0.0001, step = 0.1, tooltip = "Zum Umrechnen auf den Chart-Preis. Beispiel: Du chartest SPX, Daten sind von SPY -> ca. 10. Bei QQQ-Daten auf NQ ca. 41.")
+showCall = input.bool(true, "Call Wall")
+showPut  = input.bool(true, "Put Wall")
+showFlip = input.bool(true, "Gamma Flip")
+showTbl  = input.bool(true, "Tabelle")
+
+// ===== Daten laden (Tageswerte, gelten ab dem jeweiligen Handelstag) =====
+callWall = request.seed(repo, base + "_CALLWALL", close, ignore_invalid_symbol = true) * mult
+putWall  = request.seed(repo, base + "_PUTWALL",  close, ignore_invalid_symbol = true) * mult
+flip     = request.seed(repo, base + "_FLIP",     close, ignore_invalid_symbol = true) * mult
+netGex   = request.seed(repo, base + "_NETGEX",   close, ignore_invalid_symbol = true)
+
+// ===== Linien (Stufen über die Zeit) =====
+plot(showCall ? callWall : na, "Call Wall",  color = color.teal,   linewidth = 2, style = plot.style_linebr)
+plot(showPut  ? putWall  : na, "Put Wall",   color = color.red,    linewidth = 2, style = plot.style_linebr)
+plot(showFlip and flip > 0 ? flip : na, "Gamma Flip", color = color.orange, linewidth = 2, style = plot.style_linebr)
+
+// ===== Labels + Tabelle am letzten Bar =====
+var label lCall = na
+var label lPut = na
+var label lFlip = na
+var table tbl = table.new(position.top_right, 2, 4, bgcolor = color.new(color.gray, 80), border_width = 1)
+
+if barstate.islast
+    label.delete(lCall)
+    label.delete(lPut)
+    label.delete(lFlip)
+    if showCall and not na(callWall)
+        lCall := label.new(bar_index, callWall, "Call Wall " + str.tostring(callWall, "#.##"), style = label.style_label_left, color = color.teal, textcolor = color.white, size = size.small)
+    if showPut and not na(putWall)
+        lPut := label.new(bar_index, putWall, "Put Wall " + str.tostring(putWall, "#.##"), style = label.style_label_left, color = color.red, textcolor = color.white, size = size.small)
+    if showFlip and not na(flip) and flip > 0
+        lFlip := label.new(bar_index, flip, "Gamma Flip " + str.tostring(flip, "#.##"), style = label.style_label_left, color = color.orange, textcolor = color.white, size = size.small)
+
+    if showTbl
+        if na(netGex)
+            table.cell(tbl, 0, 0, "Keine Daten", text_color = color.red)
+            table.cell(tbl, 1, 0, "Repo/Ticker prüfen", text_color = chart.fg_color)
+        else
+            table.cell(tbl, 0, 0, base + " Net GEX", text_color = chart.fg_color)
+            table.cell(tbl, 1, 0, str.tostring(netGex, "#.##") + " Mrd $", text_color = netGex >= 0 ? color.teal : color.red)
+            table.cell(tbl, 0, 1, "Regime", text_color = chart.fg_color)
+            table.cell(tbl, 1, 1, netGex >= 0 ? "Positiv (dämpfend)" : "Negativ (verstärkend)", text_color = netGex >= 0 ? color.teal : color.red)
+            table.cell(tbl, 0, 2, "Preis vs. Flip", text_color = chart.fg_color)
+            table.cell(tbl, 1, 2, na(flip) or flip <= 0 ? "n/a" : (close > flip ? "darüber" : "darunter"), text_color = chart.fg_color)
